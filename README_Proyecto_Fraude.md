@@ -119,8 +119,8 @@ Este proyecto fue desarrollado por **Pedro Rubio** como parte de su portafolio p
 
 ## 📬 Contacto
 
-📧 analistas@datatrust.ai  
-🔗 [LinkedIn](https://www.linkedin.com/in/pedro-rubio) *(reemplaza si aplica)*
+Rubio-pedro@hotmail.com
+www.linkedin.com/in/srdelosdatos
 
 ---
 
