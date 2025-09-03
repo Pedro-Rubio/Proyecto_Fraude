@@ -9,3 +9,4 @@ transaction_id,client_id,card_id,date,amount,use_chip,has_chip,num_cards_issued,
 9000008,797,3127,2015-09-17 13:20:00,3679.33,Online Transaction,1,2,9000.0,2014-08-15,2014,1964,0,5,4411,44114,ONLINE,,,13,4,9,2015,Visa,Credit,0,1
 9000009,604,4280,2012-03-10 09:12:00,82.15,Swipe Transaction,0,1,6000.0,2008-05-20,2009,4232,0,10,5411,67570,Bettendorf,IA,52722,9,7,3,2012,Visa,Debit,0,0
 9000010,1129,102,2010-01-01 00:02:00,80.0,Swipe Transaction,0,1,4000.0,2007-10-01,2008,4477,0,11,4829,27092,Vista,CA,92084,0,6,1,2010,Discover,Debit,0,0
+
