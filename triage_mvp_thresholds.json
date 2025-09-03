@@ -1,0 +1,6 @@
+{
+  "thr_high": 0.9991310578573172,
+  "min_precision_high": 0.8,
+  "review_capacity": 200,
+  "policy": "auto-block by min precision; review Top-N by expected_loss; rest OK"
+}
