@@ -15,12 +15,12 @@ from sklearn.metrics import (
 # Configuración general
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="Fraude • MVP", layout="wide")
-ART_DIR = "artifacts_noleak_v1"
+ART_DIR  = "artifacts_noleak_v1"
 PIPE_PATH = os.path.join(ART_DIR, "best_so_far.pkl")
 THR_PATH  = os.path.join(ART_DIR, "triage_mvp_thresholds.json")
 
 # ─────────────────────────────────────────────
-# Utilidades de carga / esquema
+# Utilidades
 # ─────────────────────────────────────────────
 @st.cache_resource
 def load_pipeline(path: str):
@@ -28,12 +28,11 @@ def load_pipeline(path: str):
         return joblib.load(f)
 
 def _find_column_transformer(pipeline):
-    """Devuelve el ColumnTransformer del pipeline (busca el step 'prep' o el primero que sea ColumnTransformer)."""
+    """Devuelve el ColumnTransformer del pipeline (busca step 'prep' o el primero que sea ColumnTransformer)."""
     ct = None
     if hasattr(pipeline, "named_steps") and "prep" in pipeline.named_steps:
         ct = pipeline.named_steps["prep"]
     else:
-        # Búsqueda por tipo
         from sklearn.compose import ColumnTransformer
         for _, step in getattr(pipeline, "steps", []):
             if isinstance(step, ColumnTransformer):
@@ -42,62 +41,67 @@ def _find_column_transformer(pipeline):
     return ct
 
 def get_training_schema(pipeline) -> Tuple[List[str], List[str], List[str]]:
-    """
-    Obtiene columnas numéricas y categóricas (lista de nombres) desde el ColumnTransformer.
-    Retorna (num_cols, cat_cols, required_cols).
-    """
+    """Obtiene columnas numéricas y categóricas desde el ColumnTransformer."""
     ct = _find_column_transformer(pipeline)
     if ct is None:
         return [], [], []
-
-    # Intenta recuperar por nombre de transformador
     num_cols, cat_cols = [], []
     try:
+        # Preferentemente por nombre
         if "num" in ct.named_transformers_:
-            num_cols = list(ct.named_transformers_["num"][2] if isinstance(ct.named_transformers_["num"], tuple) else ct.transformers_[0][2])
-        if "cat" in ct.named_transformers_:
-            cat_cols = list(ct.named_transformers_["cat"][2] if isinstance(ct.named_transformers_["cat"], tuple) else ct.transformers_[1][2])
-    except Exception:
-        # Fallback genérico a ct.transformers_
-        try:
-            num_cols = list(ct.transformers_[0][2])
-            cat_cols = list(ct.transformers_[1][2])
-        except Exception:
+            # En sklearn 1.6, named_transformers_ devuelve transformer; las columnas están en transformers_
             pass
-
+        # Fallback genérico
+        transformers = list(ct.transformers_)
+        if len(transformers) >= 1:
+            num_cols = list(transformers[0][2])
+        if len(transformers) >= 2:
+            cat_cols = list(transformers[1][2])
+    except Exception:
+        pass
     required_cols = list(num_cols) + list(cat_cols)
     return num_cols, cat_cols, required_cols
 
-def _safe_to_numeric(series: pd.Series) -> pd.Series:
-    return pd.to_numeric(series, errors="coerce")
-
 def align_to_schema(df_in: pd.DataFrame, num_cols: List[str], cat_cols: List[str]) -> pd.DataFrame:
     """
-    Crea las columnas faltantes, ordena y castea tipos
-    para que coincidan con lo que espera el ColumnTransformer.
+    Alinea df_in al esquema de entrenamiento:
+    - Crea columnas faltantes
+    - Convierte numéricas a float con np.nan (maneja "1,23", "", etc.)
+    - Convierte categóricas a object y reemplaza pd.NA -> np.nan
+    - Devuelve sólo las columnas requeridas y en el orden correcto
     """
     df = df_in.copy()
+    required = list(num_cols) + list(cat_cols)
 
     # Crear columnas faltantes
-    for c in num_cols + cat_cols:
+    for c in required:
         if c not in df.columns:
             df[c] = np.nan
 
-    # Casteo por tipo
-    for c in num_cols:
-        df[c] = _safe_to_numeric(df[c])
-    for c in cat_cols:
-        # Mantener string; los NaN los maneja el imputer del pipeline
-        df[c] = df[c].astype("string")
+    # Normalizar faltantes globalmente (pd.NA -> np.nan)
+    df = df.replace({pd.NA: np.nan})
 
-    # Orden final (extras quedan fuera; el CT con remainder='drop' los ignoraría igual)
-    return df[num_cols + cat_cols]
+    # Numéricas
+    for c in num_cols:
+        df[c] = (
+            df[c].astype(str)
+                 .str.replace(",", ".", regex=False)
+                 .replace(["", "nan", "NaN", "NULL", "None"], np.nan)
+        )
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # Categóricas: object + faltantes como np.nan
+    for c in cat_cols:
+        df[c] = df[c].astype(object)
+        mask_na = pd.isna(df[c])
+        if mask_na.any():
+            df.loc[mask_na, c] = np.nan
+
+    # Orden final (extras quedan fuera)
+    return df[required]
 
 def threshold_for_min_precision(y_true, y_prob, target_precision=0.8) -> Optional[float]:
-    """
-    Devuelve el umbral más alto que cumpla la precisión objetivo.
-    Si no encuentra ninguno, retorna None.
-    """
+    """Devuelve el umbral más alto que cumpla la precisión objetivo (elige mayor recall)."""
     prec, rec, thr = precision_recall_curve(y_true, y_prob)
     mask = prec[:-1] >= target_precision
     if not mask.any():
@@ -113,7 +117,7 @@ def build_download(df: pd.DataFrame, filename: str) -> bytes:
     return buf.getvalue()
 
 # ─────────────────────────────────────────────
-# Cargar artefactos (pipeline + thresholds)
+# Cargar artefactos
 # ─────────────────────────────────────────────
 if not os.path.exists(PIPE_PATH):
     st.error(f"No se encontró el pipeline en `{PIPE_PATH}`. Sube tus artefactos al repo.")
@@ -137,6 +141,7 @@ st.sidebar.write("Artefacto:", f"`{PIPE_PATH}`")
 with st.sidebar.expander("Parámetros MVP", expanded=True):
     min_prec_high = st.slider("Precisión mínima (ALTO_RIESGO)", 0.50, 0.99, float(cfg_default["min_precision_high"]), 0.01)
     review_capacity = st.number_input("Capacidad de revisión (REVISAR)", min_value=0, step=10, value=int(cfg_default["review_capacity"]))
+    max_rows = st.number_input("Límite filas a puntuar", min_value=1_000, step=10_000, value=100_000)
     allow_reestimate_thr = st.checkbox("Reestimar umbral si el CSV trae `is_fraud`", value=True)
 st.sidebar.caption("Política: bloqueo por precisión mínima + revisión Top-N por pérdida esperada (prob * amount).")
 
@@ -175,92 +180,118 @@ with tab1:
         else:
             df_infer = df_raw.copy()
 
-        # Scoring robusto (algunos estimadores no implementan predict_proba)
-        try:
-            y_prob = pipeline.predict_proba(df_infer)[:, 1]
-        except Exception:
-            # fallback: decision_function escalado a [0,1]
-            score = pipeline.decision_function(df_infer)
-            y_prob = (score - score.min()) / (score.max() - score.min() + 1e-12)
+        # Diagnóstico de columnas y dtypes
+        with st.expander("🔧 Diagnóstico esquema vs modelo"):
+            faltantes = [c for c in (num_cols + cat_cols) if c not in df_raw.columns]
+            extras    = [c for c in df_raw.columns if c not in (num_cols + cat_cols)]
+            st.write("**Faltantes creadas:**", faltantes)
+            st.write("**Columnas extra (se ignoran):**", extras)
+            dtypes_df = pd.DataFrame({"col": df_infer.columns, "dtype": df_infer.dtypes.astype(str)})
+            st.dataframe(dtypes_df, use_container_width=True, height=220)
 
-        scored = df_raw.copy()
-        scored["score"] = y_prob
+        # Límite de filas
+        if len(df_infer) > max_rows:
+            st.info(f"Se limitarán las predicciones a las primeras {max_rows:,} filas (archivo tiene {len(df_infer):,}).")
+            df_infer = df_infer.head(int(max_rows))
+            df_raw   = df_raw.head(int(max_rows))
 
-        # Pérdida esperada
-        if "amount" in scored.columns:
-            scored["expected_loss"] = scored["score"] * scored["amount"].fillna(0)
-        else:
-            scored["expected_loss"] = scored["score"] * 0.0
+        # ── Botón de predicción ──
+        do_score = st.button("🔮 Predecir", type="primary", use_container_width=True)
 
-        # Umbral ALTO_RIESGO
-        thr_high = cfg_default.get("thr_high", 0.99)
-        if allow_reestimate_thr and "is_fraud" in scored.columns:
-            try:
-                thr_est = threshold_for_min_precision(
-                    scored["is_fraud"].astype(int).values,
-                    scored["score"].values,
-                    target_precision=min_prec_high
-                )
-                if thr_est is not None:
-                    thr_high = thr_est
-            except Exception:
-                pass
+        if do_score:
+            with st.spinner("Generando scores..."):
+                # Asegurar que no queden pd.NA
+                df_infer = df_infer.replace({pd.NA: np.nan})
 
-        # Triage: ALTO_RIESGO + REVISAR (Top-N por expected_loss) + OK
-        high_mask = scored["score"].values >= thr_high
-        triage = np.array(["OK"] * len(scored), dtype=object)
-        triage[np.where(high_mask)[0]] = "ALTO_RIESGO"
+                # Scoring robusto
+                try:
+                    y_prob = pipeline.predict_proba(df_infer)[:, 1]
+                except Exception:
+                    score = pipeline.decision_function(df_infer)
+                    y_prob = (score - score.min()) / (score.max() - score.min() + 1e-12)
 
-        rem_mask = ~high_mask
-        order_low = np.argsort(scored.loc[rem_mask, "expected_loss"].values)[::-1]
-        review_take = min(review_capacity, order_low.shape[0])
-        if review_take > 0:
-            low_idx = np.where(rem_mask)[0]
-            review_idx = low_idx[order_low[:review_take]]
-            triage[review_idx] = "REVISAR"
-        scored["triage"] = triage
+                scored = df_raw.copy()
+                scored["score"] = y_prob
 
-        # Guardar en sesión para pestaña de métricas
-        st.session_state["scored_df"] = scored
-        st.session_state["thr_high"] = float(thr_high)
+                # Pérdida esperada (amount -> numérico)
+                if "amount" in scored.columns:
+                    amount_num = pd.to_numeric(
+                        scored["amount"].astype(str).str.replace(",", ".", regex=False),
+                        errors="coerce"
+                    ).fillna(0.0)
+                    scored["expected_loss"] = scored["score"] * amount_num
+                else:
+                    scored["expected_loss"] = scored["score"] * 0.0
 
-        # Resumen por banda
-        def band_report(df_band):
-            n = len(df_band)
-            if "is_fraud" in df_band.columns:
-                tp = int(df_band["is_fraud"].sum())
-                fp = n - tp
-                prec = tp/n if n > 0 else 0.0
-                return n, tp, fp, prec
-            return n, None, None, None
+                # Umbral ALTO_RIESGO
+                thr_high = float(cfg_default.get("thr_high", 0.99))
+                if allow_reestimate_thr and "is_fraud" in scored.columns:
+                    try:
+                        thr_est = threshold_for_min_precision(
+                            scored["is_fraud"].astype(int).values,
+                            scored["score"].values,
+                            target_precision=float(min_prec_high)
+                        )
+                        if thr_est is not None:
+                            thr_high = float(thr_est)
+                    except Exception:
+                        pass
 
-        col1, col2, col3 = st.columns(3)
-        for band, col in zip(["ALTO_RIESGO", "REVISAR", "OK"], [col1, col2, col3]):
-            subset = scored[scored["triage"] == band]
-            n, tp, fp, prec = band_report(subset)
-            with col:
-                st.metric(band, f"{n:,} casos", help="TP/FP solo si el CSV trae is_fraud")
-                if tp is not None:
-                    st.caption(f"TP={tp} | FP={fp} | Prec={prec:.3f}")
+                # Triage: ALTO_RIESGO + REVISAR (Top-N por expected_loss) + OK
+                high_mask = scored["score"].values >= thr_high
+                triage = np.array(["OK"] * len(scored), dtype=object)
+                triage[np.where(high_mask)[0]] = "ALTO_RIESGO"
 
-        st.download_button(
-            "⬇️ Descargar CSV con scores y triage",
-            data=build_download(scored, "scored_with_triage.csv"),
-            file_name="scored_with_triage.csv",
-            mime="text/csv"
-        )
+                rem_mask = ~high_mask
+                order_low = np.argsort(scored.loc[rem_mask, "expected_loss"].values)[::-1]
+                review_take = min(int(review_capacity), order_low.shape[0])
+                if review_take > 0:
+                    low_idx = np.where(rem_mask)[0]
+                    review_idx = low_idx[order_low[:review_take]]
+                    triage[review_idx] = "REVISAR"
 
-        # Vista rápida: top por score
-        st.write("🔎 Top 50 por score")
-        st.dataframe(scored.sort_values("score", ascending=False).head(50), use_container_width=True)
+                scored["triage"] = triage
+
+                # Guardar en sesión para la pestaña 2
+                st.session_state["scored_df"] = scored
+                st.session_state["thr_high"]  = thr_high
+
+            # Resumen por banda
+            def band_report(df_band):
+                n = len(df_band)
+                if "is_fraud" in df_band.columns:
+                    tp = int(df_band["is_fraud"].sum())
+                    fp = n - tp
+                    prec = tp/n if n > 0 else 0.0
+                    return n, tp, fp, prec
+                return n, None, None, None
+
+            col1, col2, col3 = st.columns(3)
+            for band, col in zip(["ALTO_RIESGO", "REVISAR", "OK"], [col1, col2, col3]):
+                subset = scored[scored["triage"] == band]
+                n, tp, fp, prec = band_report(subset)
+                with col:
+                    st.metric(band, f"{n:,} casos", help="TP/FP solo si el CSV trae is_fraud")
+                    if tp is not None:
+                        st.caption(f"TP={tp} | FP={fp} | Prec={prec:.3f}")
+
+            st.download_button(
+                "⬇️ Descargar CSV con scores y triage",
+                data=build_download(scored, "scored_with_triage.csv"),
+                file_name="scored_with_triage.csv",
+                mime="text/csv"
+            )
+
+            st.write("🔎 Top 50 por score")
+            st.dataframe(scored.sort_values("score", ascending=False).head(50), use_container_width=True)
 
 # ============ TAB 2: Métricas (si hay is_fraud) ============
 with tab2:
     st.subheader("📈 Métricas")
     scored = st.session_state.get("scored_df")
-    thr_high = st.session_state.get("thr_high", cfg_default.get("thr_high", 0.99))
+    thr_high = float(st.session_state.get("thr_high", cfg_default.get("thr_high", 0.99)))
     if scored is None:
-        st.info("Primero sube un CSV en la pestaña anterior.")
+        st.info("Primero sube un CSV y pulsa **🔮 Predecir** en la pestaña anterior.")
     elif "is_fraud" not in scored.columns:
         st.warning("El CSV no trae `is_fraud`, no se pueden calcular métricas.")
     else:
@@ -290,16 +321,16 @@ with tab2:
 # ============ TAB 3: Info del modelo =======================
 with tab3:
     st.subheader("ℹ️ Información del modelo")
-    st.write("**Columnas numéricas (expectativa de entrenamiento)**:", ", ".join(num_cols))
-    st.write("**Columnas categóricas (expectativa de entrenamiento)**:", ", ".join(cat_cols))
+    st.write("**Columnas numéricas (entrenamiento)**:", ", ".join(num_cols))
+    st.write("**Columnas categóricas (entrenamiento)**:", ", ".join(cat_cols))
 
-    # Intento de introspección de importancias
+    # Importancias (si aplica)
     try:
         clf = pipeline.named_steps.get("clf")
         ct  = _find_column_transformer(pipeline)
 
         if hasattr(clf, "coef_"):
-            # Nombres OHE (si existen) para columnas categóricas
+            # nombres OHE si existen
             ohe_names = []
             try:
                 ohe = ct.named_transformers_["cat"].named_steps["ohe"]  # type: ignore
@@ -317,7 +348,6 @@ with tab3:
             st.dataframe(top, use_container_width=True)
 
         elif hasattr(clf, "feature_importances_"):
-            # Nota: para árboles, el mapeo a nombres tras OHE es más complejo; dejamos indicativo.
             fi = pd.DataFrame({
                 "feature": list(num_cols) + ["OHE_*"],
                 "importance": clf.feature_importances_
@@ -329,4 +359,4 @@ with tab3:
     except Exception as e:
         st.warning(f"No se pudo introspeccionar importancias: {e}")
 
-    st.caption(f"scikit-learn runtime: importado con la versión que hay en requirements.txt")
+    st.caption("Runtime scikit-learn: usa las versiones fijadas en requirements.txt")
