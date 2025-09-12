@@ -276,6 +276,8 @@ pytest -q
 
 ## 👤 Autor
 
-**Pedro Rubio** — Data Science & Analytics  
-- App Streamlit (scoring/triage), pipelines reproducibles, BI con Tableau/Power BI.  
-- Contacto: *tu_email* — *tu_linkedin* — *tu_portafolio*
+**Ezequiel Gonzalez** — Data Science & Analytics 
+
+**Pedro Rubio** — Machine Learning Engenieer 
+- App Streamlit *https://proyectofraude-hyd2ycaphdnqqbeo87scer.streamlit.app/*, BI con Tableau/Power BI.  
+- Contacto: *srdelosdatos@gmail.com* — *www.linkedin.com/in/srdelosdatos* — 
