@@ -42,7 +42,7 @@ Los fraudes con tarjeta impactan directamente en pérdidas financieras y experie
 - **Modelos:** *Logistic Regression* + *RandomForest* (baselines) y opción *LightGBM* (si está disponible).
 - **Selección & Umbral:** métrica objetivo **PR AUC** y ajuste de umbral por **coste de errores** o **precisión mínima**.
 - **Despliegue:** app **Streamlit** para scoring por lote (CSV), con **triage** y descarga de resultados.
-- **BI:** dashboard en **Tableau/Power BI** con KPIs, serie temporal, top ciudades/giros y mapa.
+- **BI:** dashboard en **Tableau/Power BI/Looker Studio** con KPIs, serie temporal, top ciudades/giros y mapa.
 
 ---
 
@@ -50,22 +50,19 @@ Los fraudes con tarjeta impactan directamente en pérdidas financieras y experie
 
 ```text
 proyecto_fraude/
-├─ app.py                            # App Streamlit (MVP operativo)
-├─ requirements.txt                  # Dependencias (pinneadas a Py 3.11 / sklearn 1.4)
-├─ runtime.txt                       # python-3.11 (Streamlit Cloud)
+├─ app.py                                    # App Streamlit (MVP operativo)
+├─ requirements.txt                          # Dependencias (pinneadas a Py 3.11 / sklearn 1.4)
+├─ runtime.txt                               # python-3.11 (Streamlit Cloud)
 ├─ sample_data/
-│  └─ sample_10_transactions.csv     # CSV de prueba para la app
-├─ artifacts_noleak_v1/              # Artefactos para producción
-│  ├─ best_so_far.pkl                # Pipeline (prep + modelo)
-│  ├─ triage_thresholds.json         # Umbrales/parametría por defecto del MVP
-│  ├─ triage_assignments.csv         # (opcional) Ejemplo de salida
-│  └─ triage_summary.csv             # (opcional) Resumen por banda
+│  └─ sample_10_transactions.csv             # CSV de prueba para la app
+├─ artifacts_noleak_v1/                      # Artefactos para producción
+│  ├─ best_so_far.pkl                        # Pipeline (prep + modelo)
+│  ├─ triage_thresholds.json                 # Umbrales/parametría por defecto del MVP
 ├─ notebooks/
-│  ├─ 01_eda_y_limpieza.ipynb        # Exploración + limpieza por dataset
-│  ├─ 02_feature_engineering.ipynb   # Enriquecimiento de variables
-│  └─ 03_training_noleak.ipynb       # Entrenamiento sin fuga + checkpoints
-├─ tests/
-│  └─ test_model.py                  # Pytests mínimos de sanidad del modelo
+│  ├─ Proyecto_Data_Fraude_Depurado.ipynb    # Exploración + limpieza + carga + Desarrollo de ML
+├─ Data Visualizacion/
+│  ├─ Proyecto_Power_ BI                     # Visualizaciones desarrolladas en Microsoft Power BI
+│  ├─ Proyecto_Looker_Studio                 # Visualizaciones desarrolladas en Looker Studio
 └─ README.md
 ```
 
