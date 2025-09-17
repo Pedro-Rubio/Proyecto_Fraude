@@ -195,7 +195,7 @@ streamlit run app.py
 
 ---
 
-## 📈 Dashboards BI (Tableau/Power BI)
+## 📈 Dashboards BI (Tableau/Power BI/ Looker Studio)
 
 **Tablero Resumen Ejecutivo:**
 - KPIs: **Total Transacciones**, **Total Fraudes**, **Tasa de Fraude**, **Monto Total**.
