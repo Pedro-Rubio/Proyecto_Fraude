@@ -274,7 +274,7 @@ pytest -q
 ## 👤 Autor
 
 **Ezequiel Gonzalez** — Data Science & Analytics 
-
+- *ezequiel.gonzalez08a@gmail.com*
 **Pedro Rubio** — Machine Learning Engenieer 
 
 - App Streamlit *https://proyectofraude-hyd2ycaphdnqqbeo87scer.streamlit.app/*, BI con Tableau/Power BI.
