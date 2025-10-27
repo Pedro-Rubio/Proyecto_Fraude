@@ -275,7 +275,7 @@ pytest -q
 
 **Ezequiel Gonzalez** — Data Science & Analytics 
 - *ezequiel.gonzalez08a@gmail.com*
-**Pedro Rubio** — Machine Learning Engenieer 
+**Pedro Rubio**  
 
 - App Streamlit *https://proyectofraude-hyd2ycaphdnqqbeo87scer.streamlit.app/*, BI con Tableau/Power BI.
 - Notebook/Google Colab: *https://colab.research.google.com/drive/1_Ed65bITdC714VqEDTFk9ouYxYGiwDoL?usp=sharing*
